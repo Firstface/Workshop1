@@ -1,4 +1,4 @@
-import React, { useRef, useState, useContext } from "react";
+import React, { useRef, useContext } from "react";
 import {
   useTranslate,
   useGetLocale,
@@ -28,7 +28,6 @@ import { ColorModeContext } from "../../contexts/color-mode";
 
 const { TextArea } = Input;
 
-
 export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => {
   const { data: permissions } = usePermissions<string[]>();
   const { mode } = useContext(ColorModeContext);
@@ -45,7 +44,6 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
   const { resource } = useResource();
 
   const formRef = useRef<any>(null);
-  const [formChanged, setFormChanged] = useState(false);
 
   const translate = useTranslate();
   const locale = useGetLocale();
@@ -101,43 +99,30 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
     return {};
   };
 
-  const handleValuesChange = () => {
-    setFormChanged(true);
-  };
-
+  // 使用 isFieldsTouched 判断表单是否被修改
   const handleButtonClick = () => {
-    if (formChanged) {
-      formRef.current?.submit();
+    const form = formRef.current;
+    if (form && form.isFieldsTouched()) {
+      // 有字段被修改过，执行提交
+      form.submit();
     } else {
+      // 没有修改，返回列表页
       list(resource?.name || "issues");
     }
   };
 
-  const initialValues = React.useMemo(() => ({
-    id: issueData?.id,
-    lastModifiedAt: issueData?.lastModifiedAt,
-    reportName: issueData?.reportName,
-    masNumber: issueData?.masNumber,
-    inspectionDepartmentCode: issueData?.inspectionDepartmentCode,
-    inspectionYear: issueData?.inspectionYear ? dayjs(issueData.inspectionYear, "YYYY") : undefined,
-    findingsEnglish: issueData?.findingsEnglish,
-    findingsChinese: issueData?.findingsChinese,
-    auditRecommendationsEnglish: issueData?.auditRecommendationsEnglish,
-    auditRecommendationsChinese: issueData?.auditRecommendationsChinese,
-    lineDepartmentCode: issueData?.lineOrgUnitId
-      ? Object.keys(departments.map).find((code) => departments.map[code]?.id === issueData.lineOrgUnitId)
-      : undefined,
-    lineOrgUnitId: issueData?.lineOrgUnitId,
-    nextFollowUpDate: issueData?.nextFollowUpDate ? dayjs(issueData.nextFollowUpDate, "YYYY-MM") : undefined,
-    recurringType: issueData?.recurringType,
-    riskType: issueData?.riskType,
-    remediations: (issueData?.remediations ?? []).map(remediation => ({
-      ...remediation,
-      deadline: remediation.deadline ? dayjs(remediation.deadline, "YYYY-MM") : undefined,
-      followUpDate: remediation.followUpDate ? dayjs(remediation.followUpDate, "YYYY-MM") : undefined,
-    }))
-  }), [issueData, departments.map]);
+  // 简化的初始值设置
+  const initialValues = React.useMemo(() => {
+    if (!issueData) return {};
 
+    return {
+      ...issueData,
+      lineDepartmentCode: issueData?.lineOrgUnitId
+        ? Object.keys(departments.map).find((code) => departments.map[code]?.id === issueData.lineOrgUnitId)
+        : undefined,
+      remediations: issueData?.remediations ?? []
+    };
+  }, [issueData, departments.map]);
 
   return (
     <Show>
@@ -153,7 +138,6 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
           {...formProps}
           ref={formRef}
           layout="vertical"
-          onValuesChange={handleValuesChange}
           initialValues={initialValues}
         >
           <Form.Item name="id" hidden>
@@ -205,6 +189,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
               <Form.Item
                 label={translate("issues.fields.inspectionYear")}
                 name="inspectionYear"
+                getValueFromEvent={(value) => value ? value.format("YYYY") : ""}
+                getValueProps={(value) => ({ value: value ? dayjs(value, "YYYY") : undefined })}
               >
                 <DatePicker
                   picker="year"
@@ -215,9 +201,6 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                   }}
                   placeholder={translate("issues.fields.inspectionYear")}
                   disabled={!canEditGeneralFields()}
-                  onChange={(data) => {
-                    formProps.form?.setFieldValue('inspectionYear', data);
-                  }}
                 />
               </Form.Item>
             </Col>
@@ -293,6 +276,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
               <Form.Item
                 label={translate("issues.fields.nextFollowUpDate")}
                 name="nextFollowUpDate"
+                getValueFromEvent={(value) => value ? value.format("YYYY-MM") : ""}
+                getValueProps={(value) => ({ value: value ? dayjs(value, "YYYY-MM") : undefined })}
               >
                 <DatePicker
                   picker="month"
@@ -303,9 +288,6 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                   }}
                   placeholder={translate("issues.fields.nextFollowUpDate")}
                   disabled={!canEditGeneralFields()}
-                  onChange={(data) => {
-                    formProps.form?.setFieldValue('nextFollowUpDate', data);
-                  }}
                 />
               </Form.Item>
             </Col>
@@ -409,6 +391,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                         label={translate("remediations.fields.deadline")}
                         name={[field.name, 'deadline']}
                         rules={[{ required: true, message: translate("errors.required") }]}
+                        getValueFromEvent={(value) => value ? value.format("YYYY-MM") : ""}
+                        getValueProps={(value) => ({ value: value ? dayjs(value, "YYYY-MM") : undefined })}
                       >
                         <DatePicker
                           picker="month"
@@ -419,9 +403,6 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                           }}
                           placeholder={translate("common.SelectMonth")}
                           disabled={!canEditGeneralFields()}
-                          onChange={(data) => {
-                            formProps.form?.setFieldValue(['remediations', index, 'deadline'], data);
-                          }}
                         />
                       </Form.Item>
 
@@ -475,6 +456,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                           <Form.Item
                             label={translate("remediations.fields.followUpDate")}
                             name={[field.name, 'followUpDate']}
+                            getValueFromEvent={(value) => value ? value.format("YYYY-MM") : ""}
+                            getValueProps={(value) => ({ value: value ? dayjs(value, "YYYY-MM") : undefined })}
                           >
                             <DatePicker
                               picker="month"
@@ -485,9 +468,6 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                               }}
                               placeholder={translate("remediations.fields.followUpDate")}
                               disabled={!canEditGeneralFields()}
-                              onChange={(data) => {
-                                formProps.form?.setFieldValue(['remediations', index, 'followUpDate'], data);
-                              }}
                             />
                           </Form.Item>
 
@@ -555,14 +535,13 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
               onClick={handleButtonClick}
               loading={formLoading}
             >
-              {formChanged
+              {formRef.current?.isFieldsTouched()
                 ? translate("buttons.save")
                 : translate("buttons.back")}
             </Button>
           </Form.Item>
         </Form>
       </CreateOrEdit>
-
     </Show>
   );
 };
