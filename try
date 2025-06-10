@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import {
   useTranslate,
   useGetLocale,
@@ -98,7 +98,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
   });
 
   const departmentOptions = React.useMemo(() => {
-    return departments.array.map((department: any) => ({
+    return departments.array.map((department: any, index: number) => ({
+      key: `dept-${department.code}-${index}`,
       value: department.code,
       label: currentLocale === "zh-CN" ? department.chineseName : department.englishName,
     }));
@@ -115,13 +116,57 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
     }
   };
 
-  const initialValues = React.useMemo(() => ({
-    ...issueData,
-    lineDepartmentCode: issueData?.lineOrgUnitId
+  const initialValues = React.useMemo(() => {
+    const lineDepartmentCode = issueData?.lineOrgUnitId
       ? Object.keys(departments.map).find((code) => departments.map[code]?.id === issueData.lineOrgUnitId)
-      : undefined,
-    remediations: issueData?.remediations ?? []
-  }), [issueData, departments.map]);
+      : undefined;
+
+    const remediations = issueData?.remediations ?? [];
+
+    return {
+      ...issueData,
+      lineDepartmentCode,
+      remediations
+    };
+  }, [issueData, departments.map]);
+
+  // 获取当前表单中的 remediations 值，如果没有则使用 issueData 中的值
+  const currentRemediations = Form.useWatch('remediations', formProps.form) || issueData?.remediations || [];
+
+  // 计算当前选中的部门代码 - 通过 orgUnitId 查找对应的 departmentCode
+  const selectedDepartmentCodes = currentRemediations.map((r: any) => {
+    console.log('Processing remediation:', r);
+    if (r.departmentCode) {
+      console.log('Found departmentCode:', r.departmentCode);
+      return r.departmentCode;
+    }
+    // 如果没有 departmentCode，通过 orgUnitId 查找
+    if (r.orgUnitId) {
+      console.log('Looking for orgUnitId:', r.orgUnitId);
+      const department = departments.array.find((d: any) => {
+        console.log('Comparing with department:', d.id, 'vs', r.orgUnitId);
+        return d.id === r.orgUnitId;
+      });
+      console.log('Found department:', department);
+      return department?.code;
+    }
+    return null;
+  }).filter(Boolean);
+
+  // 调试日志 - 添加更详细的调试
+  console.log('Debug - currentRemediations:', currentRemediations);
+  console.log('Debug - first remediation structure:', currentRemediations[0]);
+  console.log('Debug - departments.array:', departments.array);
+  console.log('Debug - selectedDepartmentCodes after fix:', selectedDepartmentCodes);
+  console.log('Debug - issueData remediations:', issueData?.remediations);
+
+  // 确保表单初始化后，Select 显示正确的选中状态
+  useEffect(() => {
+    if (formProps.form && issueData?.remediations) {
+      console.log('Setting form remediations:', issueData.remediations);
+      formProps.form.setFieldValue('remediations', issueData.remediations);
+    }
+  }, [issueData?.id, formProps.form]);
 
   return (
     <Show>
@@ -138,6 +183,7 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
           ref={formRef}
           layout="vertical"
           initialValues={initialValues}
+          key={issueData?.id || 'new'}
         >
           <Form.Item name="id" hidden>
             <Input />
@@ -177,7 +223,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                   allowClear
                   disabled={!editIssueAccess?.can}
                   variant={!editIssueAccess?.can ? "filled" : "outlined"}
-                  options={config.issue.inspectionDepartmentCodes.map(code => ({
+                  options={config.issue.inspectionDepartmentCodes.map((code, index) => ({
+                    key: `inspection-${code}-${index}`,
                     value: code,
                     label: translate(`issues.inspectionDepartment.${code}`)
                   }))}
@@ -298,7 +345,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                   allowClear
                   disabled={!editIssueAccess?.can}
                   variant={!editIssueAccess?.can ? "filled" : "outlined"}
-                  options={config.issue.recurringType.map(option => ({
+                  options={config.issue.recurringType.map((option, index) => ({
+                    key: `recurring-${option}-${index}`,
                     value: option,
                     label: translate(`issues.recurringType.${option}`),
                   }))}
@@ -315,7 +363,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                     allowClear
                     disabled={!editIssueAccess?.can}
                     variant={!editIssueAccess?.can ? "filled" : "outlined"}
-                    options={config.issue.riskType.map(option => ({
+                    options={config.issue.riskType.map((option, index) => ({
+                      key: `risk-${option}-${index}`,
                       value: option,
                       label: translate(`issues.riskType.${option}`),
                     }))}
@@ -344,7 +393,7 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
 
                   return (
                     <Card
-                      key={field.key}
+                      key={`remediation-card-${field.key}-${index}`}
                       style={{ marginBottom: 16 }}
                       variant="outlined"
                     >
@@ -481,7 +530,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                               allowClear
                               disabled={!canEditIADAssessment}
                               variant={!canEditIADAssessment ? "filled" : "outlined"}
-                              options={config.issue.iadAssessmentStatus.map((option: string) => ({
+                              options={config.issue.iadAssessmentStatus.map((option: string, index: number) => ({
+                                key: `iad-${option}-${index}`,
                                 value: option,
                                 label: translate(`remediations.iadAssessmentStatus.${option}`),
                               }))}
@@ -509,21 +559,29 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
           {!isRemediationInProgress && editRemediationDepartmentsAccess?.can && (
             <Form.Item
               label={translate("issues.fields.remediationDepartments")}
-              name="remediations"
-              valuePropName="remediations"
             >
               <Select
                 mode="multiple"
                 allowClear
-                value={issueData?.remediations?.map((r: any) => r.departmentCode) || []}
+                placeholder={translate("issues.fields.remediationDepartments")}
+                defaultValue={selectedDepartmentCodes}
+                value={selectedDepartmentCodes}
+                key={`select-${issueData?.id || 'new'}-${JSON.stringify(selectedDepartmentCodes)}`}
                 onChange={(selectedCodes) => {
-                  const newRemediations = selectedCodes.map((departmentCode: string) => {
-                    const existingRemediation = issueData?.remediations?.find((r: any) => r.departmentCode === departmentCode);
-                    return existingRemediation || { departmentCode };
+                  const uniqueCodes = Array.from(new Set(selectedCodes));
+                  const newRemediations = uniqueCodes.map((departmentCode: string) => {
+                    const existingRemediation = currentRemediations.find((r: any) => r.departmentCode === departmentCode);
+                    const department = departments.array.find((d: any) => d.code === departmentCode);
+                    return existingRemediation || {
+                      departmentCode,
+                      orgUnitId: department?.id,
+                      status: "DRAFT"
+                    };
                   });
                   formProps.form?.setFieldValue('remediations', newRemediations);
                 }}
-                options={departments.array.map((d: any) => ({
+                options={departments.array.map((d: any, index: number) => ({
+                  key: `remediation-dept-${d.code}-${index}`,
                   label: currentLocale === "zh-CN" ? d.chineseName : d.englishName,
                   value: d.code,
                 }))}
