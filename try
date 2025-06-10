@@ -1,11 +1,11 @@
-import React, { useRef, useContext } from "react";
+import React, { useRef } from "react";
 import {
   useTranslate,
   useGetLocale,
-  usePermissions,
   IResourceComponentsProps,
   useNavigation,
   useResource,
+  useCan,
 } from "@refinedev/core";
 import enUS from "antd/es/date-picker/locale/en_US";
 import zhCN from "antd/es/date-picker/locale/zh_CN";
@@ -24,13 +24,10 @@ import dayjs from "dayjs";
 import config from "../../config";
 import { CreateOrEdit } from "../../components/crud/createOrEdit";
 import FileListUploadAndEdit from "./fileListUploadAndEdit";
-import { ColorModeContext } from "../../contexts/color-mode";
 
 const { TextArea } = Input;
 
 export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => {
-  const { data: permissions } = usePermissions<string[]>();
-  const { mode } = useContext(ColorModeContext);
   const { formProps, saveButtonProps, formLoading, queryResult } = useForm({
     refineCoreProps: {
       redirect: "show",
@@ -52,6 +49,54 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
   const issueData = queryResult?.data?.data;
   const departments = props.options?.departments ?? { array: [], map: {} };
 
+  const { data: editIssueAccess } = useCan({
+    resource: resource?.name,
+    action: "editIssue",
+    params: { id: issueData?.id, resource }
+  });
+
+  const { data: accessRiskTypeAccess } = useCan({
+    resource: resource?.name,
+    action: "accessRiskType",
+    params: { id: issueData?.id, resource }
+  });
+
+  const { data: editRemediationDepartmentsAccess } = useCan({
+    resource: resource?.name,
+    action: "editRemediationDepartments",
+    params: { id: issueData?.id, resource }
+  });
+
+  const { data: showRemediationDepartmentsAccess } = useCan({
+    resource: resource?.name,
+    action: "showRemediationDepartments",
+    params: { id: issueData?.id, resource }
+  });
+
+  const { data: submitRemediationInputAccess } = useCan({
+    resource: resource?.name,
+    action: "submitRemediationInput",
+    params: { id: issueData?.id, resource }
+  });
+
+  const { data: reviewRemediationActionByLineAccess } = useCan({
+    resource: resource?.name,
+    action: "reviewRemediationActionByLine",
+    params: { id: issueData?.id, resource }
+  });
+
+  const { data: viewRemediationDocumentsAccess } = useCan({
+    resource: resource?.name,
+    action: "viewRemediationDocuments",
+    params: { id: issueData?.id, resource }
+  });
+
+  const { data: reviewRemediationActionByIADAccess } = useCan({
+    resource: resource?.name,
+    action: "reviewRemediationActionByIAD",
+    params: { id: issueData?.id, resource }
+  });
+
   const departmentOptions = React.useMemo(() => {
     return departments.array.map((department: any) => ({
       value: department.code,
@@ -61,68 +106,22 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
 
   const isRemediationInProgress = issueData?.status === "REMEDIATION_IN_PROGRESS";
 
-  const canEditLineDepartmentVerificationComment = () => {
-    return permissions?.some((permission) =>
-      permission === "line_verifier" || permission === "auditor"
-    ) || false;
-  };
-
-  const isLineVerifier = () => {
-    return permissions?.some((permission) => permission === "line_verifier") || false;
-  };
-
-  const isAuditor = () => {
-    return permissions?.some((permission) => permission === "auditor") || false;
-  };
-
-  const canEditGeneralFields = () => {
-    return isAuditor() || !isLineVerifier();
-  };
-
-  const getReadOnlyStyle = (canEdit: boolean) => {
-    if (!canEdit) {
-      if (mode === "dark") {
-        return {
-          backgroundColor: '#2a2a2a',
-          color: '#8c8c8c',
-          cursor: 'not-allowed',
-          borderColor: '#434343'
-        };
-      } else {
-        return {
-          backgroundColor: '#f5f5f5',
-          color: '#999999',
-          cursor: 'not-allowed'
-        };
-      }
-    }
-    return {};
-  };
-
-  // 使用 isFieldsTouched 判断表单是否被修改
   const handleButtonClick = () => {
     const form = formRef.current;
     if (form && form.isFieldsTouched()) {
-      // 有字段被修改过，执行提交
       form.submit();
     } else {
-      // 没有修改，返回列表页
       list(resource?.name || "issues");
     }
   };
 
-  // 简化的初始值设置
-  const initialValues = React.useMemo(() => {
-    if (!issueData) return {};
-
-    return {
-      ...issueData,
-      lineDepartmentCode: issueData?.lineOrgUnitId
-        ? Object.keys(departments.map).find((code) => departments.map[code]?.id === issueData.lineOrgUnitId)
-        : undefined,
-      remediations: issueData?.remediations ?? []
-    };
-  }, [issueData, departments.map]);
+  const initialValues = React.useMemo(() => ({
+    ...issueData,
+    lineDepartmentCode: issueData?.lineOrgUnitId
+      ? Object.keys(departments.map).find((code) => departments.map[code]?.id === issueData.lineOrgUnitId)
+      : undefined,
+    remediations: issueData?.remediations ?? []
+  }), [issueData, departments.map]);
 
   return (
     <Show>
@@ -153,8 +152,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
             rules={[{ required: true, message: translate("errors.required") }]}
           >
             <Input
-              readOnly={!canEditGeneralFields()}
-              style={getReadOnlyStyle(canEditGeneralFields())}
+              disabled={!editIssueAccess?.can}
+              variant={!editIssueAccess?.can ? "filled" : "outlined"}
             />
           </Form.Item>
 
@@ -163,8 +162,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
             name="masNumber"
           >
             <Input
-              readOnly={!canEditGeneralFields()}
-              style={getReadOnlyStyle(canEditGeneralFields())}
+              disabled={!editIssueAccess?.can}
+              variant={!editIssueAccess?.can ? "filled" : "outlined"}
             />
           </Form.Item>
 
@@ -176,8 +175,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
               >
                 <Select
                   allowClear
-                  disabled={!canEditGeneralFields()}
-                  style={getReadOnlyStyle(canEditGeneralFields())}
+                  disabled={!editIssueAccess?.can}
+                  variant={!editIssueAccess?.can ? "filled" : "outlined"}
                   options={config.issue.inspectionDepartmentCodes.map(code => ({
                     value: code,
                     label: translate(`issues.inspectionDepartment.${code}`)
@@ -195,12 +194,10 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                 <DatePicker
                   picker="year"
                   locale={datePickerLocale}
-                  style={{
-                    width: "100%",
-                    ...getReadOnlyStyle(canEditGeneralFields())
-                  }}
+                  style={{ width: "100%" }}
                   placeholder={translate("issues.fields.inspectionYear")}
-                  disabled={!canEditGeneralFields()}
+                  disabled={!editIssueAccess?.can}
+                  variant={!editIssueAccess?.can ? "filled" : "outlined"}
                 />
               </Form.Item>
             </Col>
@@ -212,8 +209,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
           >
             <TextArea
               rows={3}
-              readOnly={!canEditGeneralFields()}
-              style={getReadOnlyStyle(canEditGeneralFields())}
+              disabled={!editIssueAccess?.can}
+              variant={!editIssueAccess?.can ? "filled" : "outlined"}
             />
           </Form.Item>
 
@@ -223,8 +220,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
           >
             <TextArea
               rows={3}
-              readOnly={!canEditGeneralFields()}
-              style={getReadOnlyStyle(canEditGeneralFields())}
+              disabled={!editIssueAccess?.can}
+              variant={!editIssueAccess?.can ? "filled" : "outlined"}
             />
           </Form.Item>
 
@@ -234,8 +231,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
           >
             <TextArea
               rows={3}
-              readOnly={!canEditGeneralFields()}
-              style={getReadOnlyStyle(canEditGeneralFields())}
+              disabled={!editIssueAccess?.can}
+              variant={!editIssueAccess?.can ? "filled" : "outlined"}
             />
           </Form.Item>
 
@@ -245,8 +242,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
           >
             <TextArea
               rows={3}
-              readOnly={!canEditGeneralFields()}
-              style={getReadOnlyStyle(canEditGeneralFields())}
+              disabled={!editIssueAccess?.can}
+              variant={!editIssueAccess?.can ? "filled" : "outlined"}
             />
           </Form.Item>
 
@@ -260,8 +257,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                   key={currentLocale}
                   allowClear
                   options={departmentOptions}
-                  disabled={!canEditGeneralFields()}
-                  style={getReadOnlyStyle(canEditGeneralFields())}
+                  disabled={!editIssueAccess?.can}
+                  variant={!editIssueAccess?.can ? "filled" : "outlined"}
                   onChange={(value) => {
                     const orgUnitId = value ? departments.map[value]?.id : null;
                     formProps.form?.setFieldValue('lineOrgUnitId', orgUnitId);
@@ -282,12 +279,10 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                 <DatePicker
                   picker="month"
                   locale={datePickerLocale}
-                  style={{
-                    width: "100%",
-                    ...getReadOnlyStyle(canEditGeneralFields())
-                  }}
+                  style={{ width: "100%" }}
                   placeholder={translate("issues.fields.nextFollowUpDate")}
-                  disabled={!canEditGeneralFields()}
+                  disabled={!editIssueAccess?.can}
+                  variant={!editIssueAccess?.can ? "filled" : "outlined"}
                 />
               </Form.Item>
             </Col>
@@ -301,8 +296,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
               >
                 <Select
                   allowClear
-                  disabled={!canEditGeneralFields()}
-                  style={getReadOnlyStyle(canEditGeneralFields())}
+                  disabled={!editIssueAccess?.can}
+                  variant={!editIssueAccess?.can ? "filled" : "outlined"}
                   options={config.issue.recurringType.map(option => ({
                     value: option,
                     label: translate(`issues.recurringType.${option}`),
@@ -311,20 +306,22 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item
-                label={translate("issues.fields.riskType")}
-                name="riskType"
-              >
-                <Select
-                  allowClear
-                  disabled={!canEditGeneralFields()}
-                  style={getReadOnlyStyle(canEditGeneralFields())}
-                  options={config.issue.riskType.map(option => ({
-                    value: option,
-                    label: translate(`issues.riskType.${option}`),
-                  }))}
-                />
-              </Form.Item>
+              {accessRiskTypeAccess?.can && (
+                <Form.Item
+                  label={translate("issues.fields.riskType")}
+                  name="riskType"
+                >
+                  <Select
+                    allowClear
+                    disabled={!editIssueAccess?.can}
+                    variant={!editIssueAccess?.can ? "filled" : "outlined"}
+                    options={config.issue.riskType.map(option => ({
+                      value: option,
+                      label: translate(`issues.riskType.${option}`),
+                    }))}
+                  />
+                </Form.Item>
+              )}
             </Col>
           </Row>
 
@@ -333,8 +330,18 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
               <>
                 {fields.map((field, index) => {
                   const remediation = formProps.form?.getFieldValue(['remediations', index]) || {};
-                  const status = remediation?.status || "N/A";
+                  const status = remediation?.status || "DRAFT";
                   const remediationId = remediation?.id;
+
+                  const canEditRemediationPlan = submitRemediationInputAccess?.can &&
+                    (status === "PENDING_REMEDIATION_DEPT_INPUT" || status === "DRAFT");
+
+                  const canEditLineDeptComment = reviewRemediationActionByLineAccess?.can &&
+                    status === "PENDING_LINE_DEPT_VERIFICATION";
+
+                  const canEditIADAssessment = reviewRemediationActionByIADAccess?.can &&
+                    status === "PENDING_IAD_ASSESSMENT";
+
                   return (
                     <Card
                       key={field.key}
@@ -361,7 +368,9 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                       </Form.Item>
 
                       <div style={{ fontWeight: 600, marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-                        {departmentOptions.find(opt => opt.value === remediation?.departmentCode)?.label}
+                        <span>
+                          {departments.array.find((dept: { id: any; }) => dept.id === remediation?.orgUnitId)?.[currentLocale === "zh-CN" ? "chineseName" : "englishName"]}
+                        </span>
                         <span style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '2px 6px' }}>{status}</span>
                       </div>
 
@@ -371,8 +380,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                         rules={[{ required: true, message: translate("errors.required") }]}
                       >
                         <Input
-                          readOnly={!canEditGeneralFields()}
-                          style={getReadOnlyStyle(canEditGeneralFields())}
+                          disabled={!canEditRemediationPlan}
+                          variant={!canEditRemediationPlan ? "filled" : "outlined"}
                         />
                       </Form.Item>
 
@@ -382,8 +391,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                         rules={[{ required: true, message: translate("errors.required") }]}
                       >
                         <Input
-                          readOnly={!canEditGeneralFields()}
-                          style={getReadOnlyStyle(canEditGeneralFields())}
+                          disabled={!canEditRemediationPlan}
+                          variant={!canEditRemediationPlan ? "filled" : "outlined"}
                         />
                       </Form.Item>
 
@@ -397,12 +406,10 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                         <DatePicker
                           picker="month"
                           locale={datePickerLocale}
-                          style={{
-                            width: "100%",
-                            ...getReadOnlyStyle(canEditGeneralFields())
-                          }}
+                          style={{ width: "100%" }}
                           placeholder={translate("common.SelectMonth")}
-                          disabled={!canEditGeneralFields()}
+                          disabled={!canEditRemediationPlan}
+                          variant={!canEditRemediationPlan ? "filled" : "outlined"}
                         />
                       </Form.Item>
 
@@ -415,17 +422,14 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                               name={[field.name, 'lineDeptVerificationComment']}
                               rules={[
                                 {
-                                  required: canEditLineDepartmentVerificationComment(),
+                                  required: canEditLineDeptComment,
                                   message: translate("errors.required"),
                                 },
                               ]}
                             >
                               <Input
-                                readOnly={!canEditLineDepartmentVerificationComment()}
-                                style={{
-                                  cursor: canEditLineDepartmentVerificationComment() ? 'text' : 'not-allowed',
-                                  ...getReadOnlyStyle(canEditLineDepartmentVerificationComment())
-                                }}
+                                disabled={!canEditLineDeptComment}
+                                variant={!canEditLineDeptComment ? "filled" : "outlined"}
                               />
                             </Form.Item>
 
@@ -434,8 +438,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                               name={[field.name, 'remediationDeptComment']}
                             >
                               <Input
-                                readOnly={!canEditGeneralFields()}
-                                style={getReadOnlyStyle(canEditGeneralFields())}
+                                disabled={true}
+                                variant="filled"
                               />
                             </Form.Item>
                           </>
@@ -448,8 +452,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                             name={[field.name, 'followUp']}
                           >
                             <Input
-                              readOnly={!canEditGeneralFields()}
-                              style={getReadOnlyStyle(canEditGeneralFields())}
+                              disabled={!canEditIADAssessment}
+                              variant={!canEditIADAssessment ? "filled" : "outlined"}
                             />
                           </Form.Item>
 
@@ -462,12 +466,10 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                             <DatePicker
                               picker="month"
                               locale={datePickerLocale}
-                              style={{
-                                width: "100%",
-                                ...getReadOnlyStyle(canEditGeneralFields())
-                              }}
+                              style={{ width: "100%" }}
                               placeholder={translate("remediations.fields.followUpDate")}
-                              disabled={!canEditGeneralFields()}
+                              disabled={!canEditIADAssessment}
+                              variant={!canEditIADAssessment ? "filled" : "outlined"}
                             />
                           </Form.Item>
 
@@ -477,8 +479,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                           >
                             <Select
                               allowClear
-                              disabled={!canEditGeneralFields()}
-                              style={getReadOnlyStyle(canEditGeneralFields())}
+                              disabled={!canEditIADAssessment}
+                              variant={!canEditIADAssessment ? "filled" : "outlined"}
                               options={config.issue.iadAssessmentStatus.map((option: string) => ({
                                 value: option,
                                 label: translate(`remediations.iadAssessmentStatus.${option}`),
@@ -488,13 +490,15 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                         </>
                       )}
 
-                      {(status === "PENDING_REMEDIATION_DEPT_ACTION" ||
-                        status === "PENDING_LINE_DEPT_VERIFICATION" ||
-                        status === "PENDING_IAD_ASSESSMENT") && (
+                      {viewRemediationDocumentsAccess?.can && (
+                        (status === "PENDING_REMEDIATION_DEPT_ACTION" ||
+                          status === "PENDING_LINE_DEPT_VERIFICATION" ||
+                          status === "PENDING_IAD_ASSESSMENT") && (
                         <div style={{ marginTop: 16 }}>
                           <FileListUploadAndEdit remediationId={remediationId} />
                         </div>
-                        )}
+                        )
+                      )}
                     </Card>
                   );
                 })}
@@ -502,7 +506,7 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
             )}
           </Form.List>
 
-          {!isRemediationInProgress && (
+          {!isRemediationInProgress && editRemediationDepartmentsAccess?.can && (
             <Form.Item
               label={translate("issues.fields.remediationDepartments")}
               name="remediations"
@@ -523,8 +527,8 @@ export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => 
                   label: currentLocale === "zh-CN" ? d.chineseName : d.englishName,
                   value: d.code,
                 }))}
-                disabled={!canEditGeneralFields()}
-                style={getReadOnlyStyle(canEditGeneralFields())}
+                disabled={!editRemediationDepartmentsAccess?.can}
+                variant={!editRemediationDepartmentsAccess?.can ? "filled" : "outlined"}
               />
             </Form.Item>
           )}
