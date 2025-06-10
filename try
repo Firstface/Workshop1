@@ -1,0 +1,601 @@
+import React, { useRef, useState, useContext } from "react";
+import {
+  useTranslate,
+  useGetLocale,
+  usePermissions,
+  IResourceComponentsProps,
+  useNavigation,
+  useResource,
+} from "@refinedev/core";
+import enUS from "antd/es/date-picker/locale/en_US";
+import zhCN from "antd/es/date-picker/locale/zh_CN";
+import { useForm, Show } from "@refinedev/antd";
+import {
+  Form,
+  Input,
+  Select,
+  DatePicker,
+  Row,
+  Col,
+  Button,
+  Card,
+} from "antd";
+import dayjs from "dayjs";
+import config from "../../config";
+import { CreateOrEdit } from "../../components/crud/createOrEdit";
+import FileListUploadAndEdit from "./fileListUploadAndEdit";
+import { ColorModeContext } from "../../contexts/color-mode";
+
+const { Option } = Select;
+const { TextArea } = Input;
+
+export const IssueCreateOrEdit: React.FC<IResourceComponentsProps> = (props) => {
+  const { data: permissions } = usePermissions<string[]>();
+  const { mode } = useContext(ColorModeContext);
+  const { formProps, saveButtonProps, formLoading, queryResult } = useForm({
+    refineCoreProps: {
+      redirect: "show",
+      onMutationSuccess: () => {
+        window.scrollTo(0, 0);
+      },
+    },
+  });
+
+  const { list } = useNavigation();
+  const { resource } = useResource();
+
+  const formRef = useRef(null);
+  const [formChanged, setFormChanged] = useState(false);
+
+  const translate = useTranslate();
+  const locale = useGetLocale();
+  const currentLocale = locale();
+  const datePickerLocale = currentLocale === "zh-CN" ? zhCN : enUS;
+  const issueData = queryResult?.data?.data;
+  const departments = props.options?.departments ?? { array: [], map: {} };
+
+  const departmentOptions = React.useMemo(() => {
+    return departments.array.map((department: any) => ({
+      value: department.code,
+      label: currentLocale === "zh-CN" ? department.chineseName : department.englishName,
+    }));
+  }, [departments, currentLocale]);
+
+  const isRemediationInProgress = issueData?.status === "REMEDIATION_IN_PROGRESS";
+
+  const canEditLineDepartmentVerificationComment = () => {
+    return permissions?.some((permission) =>
+      permission === "line_verifier" || permission === "auditor"
+    ) || false;
+  };
+
+  const isLineVerifier = () => {
+    return permissions?.some((permission) => permission === "line_verifier") || false;
+  };
+
+  const isAuditor = () => {
+    return permissions?.some((permission) => permission === "auditor") || false;
+  };
+
+  const canEditGeneralFields = () => {
+    return isAuditor() || !isLineVerifier();
+  };
+
+  const getReadOnlyStyle = (canEdit: boolean) => {
+    if (!canEdit) {
+      if (mode === "dark") {
+        return {
+          backgroundColor: '#2a2a2a',
+          color: '#8c8c8c',
+          cursor: 'not-allowed',
+          borderColor: '#434343'
+        };
+      } else {
+        return {
+          backgroundColor: '#f5f5f5',
+          color: '#999999',
+          cursor: 'not-allowed'
+        };
+      }
+    }
+    return {};
+  };
+
+  const handleValuesChange = () => {
+    setFormChanged(true);
+  };
+
+  const handleButtonClick = () => {
+    console.log("Resource:", resource);
+
+    if (formChanged) {
+      formRef.current?.submit();
+    } else {
+      list(resource?.name || "issues");
+    }
+  };
+
+  return (
+    <Show>
+      <CreateOrEdit
+        action={props.options?.action || "create"}
+        saveButtonProps={{
+          ...saveButtonProps,
+          style: { display: 'none' }
+        }}
+        isLoading={formLoading}
+      >
+        <Form
+          {...formProps}
+          ref={formRef}
+          layout="vertical"
+          onValuesChange={handleValuesChange}
+        >
+          {/* 隐藏字段保存原始数据 */}
+          {issueData?.id && (
+            <Form.Item name="id" hidden>
+              <Input />
+            </Form.Item>
+          )}
+          {issueData?.lastModifiedAt && (
+            <Form.Item name="lastModifiedAt" hidden>
+              <Input />
+            </Form.Item>
+          )}
+
+          <Form.Item
+            label={translate("issues.fields.reportName")}
+            name="reportName"
+            rules={[{ required: true, message: translate("errors.required") }]}
+            initialValue={issueData?.reportName}
+          >
+            <Input
+              readOnly={!canEditGeneralFields()}
+              style={{
+                ...getReadOnlyStyle(canEditGeneralFields())
+              }}
+            />
+          </Form.Item>
+
+          <Form.Item 
+            label={translate("issues.fields.masNumber")} 
+            name="masNumber"
+            initialValue={issueData?.masNumber}
+          >
+            <Input
+              readOnly={!canEditGeneralFields()}
+              style={{
+                ...getReadOnlyStyle(canEditGeneralFields())
+              }}
+            />
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item 
+                label={translate("issues.fields.inspectionDepartment")} 
+                name="inspectionDepartmentCode"
+                initialValue={issueData?.inspectionDepartmentCode}
+              >
+                <Select
+                  allowClear
+                  disabled={!canEditGeneralFields()}
+                  style={{
+                    ...getReadOnlyStyle(canEditGeneralFields())
+                  }}
+                >
+                  {config.issue.inspectionDepartmentCodes.map(code => (
+                    <Option key={code} value={code}>{translate(`issues.inspectionDepartment.${code}`)}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item 
+                label={translate("issues.fields.inspectionYear")} 
+                name="inspectionYear"
+                initialValue={issueData?.inspectionYear}
+              >
+                <DatePicker
+                  picker="year"
+                  locale={datePickerLocale}
+                  style={{
+                    width: "100%",
+                    ...getReadOnlyStyle(canEditGeneralFields())
+                  }}
+                  placeholder={translate("issues.fields.inspectionYear")}
+                  disabled={!canEditGeneralFields()}
+                  onChange={(data) => {
+                    // 直接设置字符串值到表单
+                    formProps.form?.setFieldValue('inspectionYear', data?.format("YYYY"));
+                  }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item 
+            label={translate("issues.fields.findingsEnglish")} 
+            name="findingsEnglish"
+            initialValue={issueData?.findingsEnglish}
+          >
+            <TextArea
+              rows={3}
+              readOnly={!canEditGeneralFields()}
+              style={{
+                ...getReadOnlyStyle(canEditGeneralFields())
+              }}
+            />
+          </Form.Item>
+          
+          <Form.Item 
+            label={translate("issues.fields.findingsChinese")} 
+            name="findingsChinese"
+            initialValue={issueData?.findingsChinese}
+          >
+            <TextArea
+              rows={3}
+              readOnly={!canEditGeneralFields()}
+              style={{
+                ...getReadOnlyStyle(canEditGeneralFields())
+              }}
+            />
+          </Form.Item>
+          
+          <Form.Item 
+            label={translate("issues.fields.auditRecommendationsEnglish")} 
+            name="auditRecommendationsEnglish"
+            initialValue={issueData?.auditRecommendationsEnglish}
+          >
+            <TextArea
+              rows={3}
+              readOnly={!canEditGeneralFields()}
+              style={{
+                ...getReadOnlyStyle(canEditGeneralFields())
+              }}
+            />
+          </Form.Item>
+          
+          <Form.Item 
+            label={translate("issues.fields.auditRecommendationsChinese")} 
+            name="auditRecommendationsChinese"
+            initialValue={issueData?.auditRecommendationsChinese}
+          >
+            <TextArea
+              rows={3}
+              readOnly={!canEditGeneralFields()}
+              style={{
+                ...getReadOnlyStyle(canEditGeneralFields())
+              }}
+            />
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item 
+                label={translate("issues.fields.lineDepartment")} 
+                name="lineDepartmentCode"
+                initialValue={issueData?.lineOrgUnitId
+                  ? Object.keys(departments.map).find((code) => departments.map[code]?.id === issueData.lineOrgUnitId)
+                  : undefined}
+              >
+                <Select
+                  key={currentLocale}
+                  allowClear
+                  options={departmentOptions}
+                  disabled={!canEditGeneralFields()}
+                  style={{
+                    ...getReadOnlyStyle(canEditGeneralFields())
+                  }}
+                  onChange={(value) => {
+                    // 同时设置 lineOrgUnitId
+                    const orgUnitId = value ? departments.map[value]?.id : null;
+                    formProps.form?.setFieldValue('lineOrgUnitId', orgUnitId);
+                  }}
+                />
+              </Form.Item>
+              {/* 隐藏字段存储 lineOrgUnitId */}
+              <Form.Item name="lineOrgUnitId" hidden>
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item 
+                label={translate("issues.fields.nextFollowUpDate")} 
+                name="nextFollowUpDate"
+                initialValue={issueData?.nextFollowUpDate}
+              >
+                <DatePicker
+                  picker="month"
+                  locale={datePickerLocale}
+                  style={{
+                    width: "100%",
+                    ...getReadOnlyStyle(canEditGeneralFields())
+                  }}
+                  placeholder={translate("issues.fields.nextFollowUpDate")}
+                  disabled={!canEditGeneralFields()}
+                  onChange={(data) => {
+                    formProps.form?.setFieldValue('nextFollowUpDate', data?.format("YYYY-MM"));
+                  }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item 
+                label={translate("issues.fields.recurringType")} 
+                name="recurringType"
+                initialValue={issueData?.recurringType}
+              >
+                <Select
+                  allowClear
+                  disabled={!canEditGeneralFields()}
+                  style={{
+                    ...getReadOnlyStyle(canEditGeneralFields())
+                  }}
+                >
+                  {config.issue.recurringType.map(option => (
+                    <Option key={option} value={option}>{translate(`issues.recurringType.${option}`)}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item 
+                label={translate("issues.fields.riskType")} 
+                name="riskType"
+                initialValue={issueData?.riskType}
+              >
+                <Select
+                  allowClear
+                  disabled={!canEditGeneralFields()}
+                  style={{
+                    ...getReadOnlyStyle(canEditGeneralFields())
+                  }}
+                >
+                  {config.issue.riskType.map(option => (
+                    <Option key={option} value={option}>{translate(`issues.riskType.${option}`)}</Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item 
+            label={translate("issues.fields.remediationDepartments")} 
+            name="remediations"
+            initialValue={issueData?.remediations || []}
+          >
+            {isRemediationInProgress ? (
+              (issueData?.remediations || []).map((remediation: any, index: number) => {
+                const status = remediation?.status || "N/A";
+                const remediationId = remediation?.id;
+                
+                return (
+                  <Card key={index} style={{ marginBottom: 16 }} variant="outlined">
+                    {/* 隐藏字段保存 remediation 的元数据 */}
+                    <Form.Item name={['remediations', index, 'id']} hidden>
+                      <Input />
+                    </Form.Item>
+                    <Form.Item name={['remediations', index, 'issueId']} hidden>
+                      <Input />
+                    </Form.Item>
+                    <Form.Item name={['remediations', index, 'departmentCode']} hidden>
+                      <Input />
+                    </Form.Item>
+                    <Form.Item name={['remediations', index, 'status']} hidden>
+                      <Input />
+                    </Form.Item>
+                    <Form.Item name={['remediations', index, 'lastModifiedAt']} hidden>
+                      <Input />
+                    </Form.Item>
+                    <Form.Item name={['remediations', index, 'orgUnitId']} hidden>
+                      <Input />
+                    </Form.Item>
+
+                    <div style={{ fontWeight: 600, marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+                      {departmentOptions.find(opt => opt.value === remediation?.departmentCode)?.label}
+                      <span style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '2px 6px' }}>{status}</span>
+                    </div>
+
+                    <Form.Item
+                      label={translate("remediations.fields.planEnglish")}
+                      name={['remediations', index, 'planEnglish']}
+                      rules={[{ required: true, message: translate("errors.required") }]}
+                      initialValue={remediation?.planEnglish}
+                    >
+                      <Input
+                        readOnly={!canEditGeneralFields()}
+                        style={{
+                          ...getReadOnlyStyle(canEditGeneralFields())
+                        }}
+                      />
+                    </Form.Item>
+
+                    <Form.Item
+                      label={translate("remediations.fields.planChinese")}
+                      name={['remediations', index, 'planChinese']}
+                      rules={[{ required: true, message: translate("errors.required") }]}
+                      initialValue={remediation?.planChinese}
+                    >
+                      <Input
+                        readOnly={!canEditGeneralFields()}
+                        style={{
+                          ...getReadOnlyStyle(canEditGeneralFields())
+                        }}
+                      />
+                    </Form.Item>
+
+                    <Form.Item
+                      label={translate("remediations.fields.deadline")}
+                      name={['remediations', index, 'deadline']}
+                      rules={[{ required: true, message: translate("errors.required") }]}
+                      initialValue={remediation?.deadline}
+                    >
+                      <DatePicker
+                        picker="month"
+                        locale={datePickerLocale}
+                        style={{
+                          width: "100%",
+                          ...getReadOnlyStyle(canEditGeneralFields())
+                        }}
+                        placeholder={translate("common.SelectMonth")}
+                        disabled={!canEditGeneralFields()}
+                        onChange={(data) => {
+                          formProps.form?.setFieldValue(['remediations', index, 'deadline'], data?.format("YYYY-MM"));
+                        }}
+                      />
+                    </Form.Item>
+
+                    {(
+                      status === "PENDING_REMEDIATION_DEPT_ACTION" ||
+                      status === "PENDING_LINE_DEPT_VERIFICATION" ||
+                      status === "PENDING_IAD_ASSESSMENT"
+                    ) && (
+                      <>
+                        <Form.Item
+                          label={translate("remediations.fields.lineDeptVerificationComment")}
+                          name={['remediations', index, 'lineDeptVerificationComment']}
+                          rules={[
+                            {
+                              required: canEditLineDepartmentVerificationComment(),
+                              message: translate("errors.required"),
+                            },
+                          ]}
+                          initialValue={remediation?.lineDeptVerificationComment}
+                        >
+                          <Input
+                            readOnly={!canEditLineDepartmentVerificationComment()}
+                            style={{
+                              cursor: canEditLineDepartmentVerificationComment() ? 'text' : 'not-allowed',
+                              ...getReadOnlyStyle(canEditLineDepartmentVerificationComment())
+                            }}
+                          />
+                        </Form.Item>
+
+                        <Form.Item
+                          label={translate("remediations.fields.remediationDeptComment")}
+                          name={['remediations', index, 'remediationDeptComment']}
+                          initialValue={remediation?.remediationDeptComment}
+                        >
+                          <Input
+                            readOnly={!canEditGeneralFields()}
+                            style={{
+                              ...getReadOnlyStyle(canEditGeneralFields())
+                            }}
+                          />
+                        </Form.Item>
+                      </>
+                    )}
+
+                    {status === "PENDING_IAD_ASSESSMENT" && (
+                      <>
+                        <Form.Item
+                          label={translate("remediations.fields.followUp")}
+                          name={['remediations', index, 'followUp']}
+                          initialValue={remediation?.followUp}
+                        >
+                          <Input
+                            readOnly={!canEditGeneralFields()}
+                            style={{
+                              ...getReadOnlyStyle(canEditGeneralFields())
+                            }}
+                          />
+                        </Form.Item>
+
+                        <Form.Item
+                          label={translate("remediations.fields.followUpDate")}
+                          name={['remediations', index, 'followUpDate']}
+                          initialValue={remediation?.followUpDate}
+                        >
+                          <DatePicker
+                            picker="month"
+                            locale={datePickerLocale}
+                            style={{
+                              width: "100%",
+                              ...getReadOnlyStyle(canEditGeneralFields())
+                            }}
+                            placeholder={translate("remediations.fields.followUpDate")}
+                            disabled={!canEditGeneralFields()}
+                            onChange={(data) => {
+                              formProps.form?.setFieldValue(['remediations', index, 'followUpDate'], data?.format("YYYY-MM"));
+                            }}
+                          />
+                        </Form.Item>
+
+                        <Form.Item
+                          label={translate("remediations.fields.iadAssessmentStatus")}
+                          name={['remediations', index, 'iadAssessmentStatus']}
+                          initialValue={remediation?.iadAssessmentStatus}
+                        >
+                          <Select
+                            allowClear
+                            disabled={!canEditGeneralFields()}
+                            style={{
+                              ...getReadOnlyStyle(canEditGeneralFields())
+                            }}
+                          >
+                            {config.issue.iadAssessmentStatus.map((option: string) => (
+                              <Option key={option} value={option}>
+                                {translate(`remediations.iadAssessmentStatus.${option}`)}
+                              </Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      </>
+                    )}
+
+                    {(
+                      status === "PENDING_REMEDIATION_DEPT_ACTION" || 
+                      status === "PENDING_LINE_DEPT_VERIFICATION" || 
+                      status === "PENDING_IAD_ASSESSMENT"
+                    ) && (
+                      <div style={{ marginTop: 16 }}>
+                        <FileListUploadAndEdit remediationId={remediationId} />
+                      </div>
+                    )}
+                  </Card>
+                );
+              })
+            ) : (
+              <Select
+                mode="multiple"
+                allowClear
+                value={issueData?.remediations?.map((r: any) => r.departmentCode) || []}
+                onChange={(selectedCodes) => {
+                  const newRemediations = selectedCodes.map((departmentCode: string) => {
+                    const existingRemediation = issueData?.remediations?.find((r: any) => r.departmentCode === departmentCode);
+                    return existingRemediation || { departmentCode };
+                  });
+                  formProps.form?.setFieldValue('remediations', newRemediations);
+                }}
+                options={departments.array.map((d: any) => ({
+                  label: currentLocale === "zh-CN" ? d.chineseName : d.englishName,
+                  value: d.code,
+                }))}
+                disabled={!canEditGeneralFields()}
+                style={{
+                  ...getReadOnlyStyle(canEditGeneralFields())
+                }}
+              />
+            )}
+          </Form.Item>
+
+          <Form.Item>
+            <Button
+              type="primary"
+              onClick={handleButtonClick}
+              loading={formLoading}
+            >
+              {formChanged
+                ? translate("buttons.save")
+                : translate("buttons.back")}
+            </Button>
+          </Form.Item>
+        </Form>
+      </CreateOrEdit>
+    </Show>
+  );
+};
